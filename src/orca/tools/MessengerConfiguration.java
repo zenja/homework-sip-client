@@ -1,16 +1,12 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
-
 package orca.tools;
 
 import java.io.Serializable;
 import java.util.Vector;
 
 /**
- *
- * @author prajwalan
+ * The configuration info for the sip client application
+ * 
+ * @author prajwalan, zenja
  */
 public class MessengerConfiguration implements Serializable
 {
