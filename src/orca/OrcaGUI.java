@@ -29,8 +29,8 @@ public class OrcaGUI extends javax.swing.JFrame
     {
         try 
         {
-            javax.swing.UIManager.setLookAndFeel(
-            		ch.randelshofer.quaqua.QuaquaManager.getLookAndFeel());
+//            javax.swing.UIManager.setLookAndFeel(
+//            		ch.randelshofer.quaqua.QuaquaManager.getLookAndFeel());
         } 
         catch(Exception e) {
                 e.printStackTrace();
