@@ -12,3 +12,6 @@
 *.swp
 *.out
 .idea
+
+# app conf file
+orca.config
