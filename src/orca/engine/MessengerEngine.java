@@ -9,7 +9,19 @@ import javax.sip.*;
 import javax.sip.message.*;
 import javax.sip.header.*;
 import javax.sip.address.*;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
+import org.apache.commons.httpclient.*;
+import org.apache.commons.httpclient.methods.*;
+import org.apache.commons.httpclient.params.HttpMethodParams;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+
+import java.io.IOException;
+import java.io.StringReader;
 import java.net.*;
 
 import java.text.ParseException;
@@ -49,6 +61,9 @@ public class MessengerEngine implements SipListener {
 	private SdpManager mySdpManager;
 	private SdpInfo answerInfo;
 	private SdpInfo offerInfo;
+	
+	private String longitudeString = "NaN";
+	private String latitudeString = "NaN";
 
 	private int myPort;
 	private String myServer;
@@ -123,10 +138,11 @@ public class MessengerEngine implements SipListener {
 
 		myServer = sipserver;
 		myGUI = GUI;
-		// myIP = InetAddress.getLocalHost().getHostAddress();
-		Socket s = new Socket("java.com", 80);
+		// lagency: myIP = InetAddress.getLocalHost().getHostAddress();
+		Socket s = new Socket("198.211.102.189", 80);
 		myIP = s.getLocalAddress().getHostAddress(); // this what actually works
 		s.close();
+		//myIP = "129.241.132.174";
 		myPort = conf.sipPort;
 
 		mySdpManager = new SdpManager();
@@ -188,8 +204,12 @@ public class MessengerEngine implements SipListener {
 				.createMaxForwardsHeader(70);
 		CSeqHeader myCSeqHeader = myHeaderFactory.createCSeqHeader(1L,
 				"REGISTER");
-		ExpiresHeader myExpiresHeader = myHeaderFactory
-				.createExpiresHeader(60000);
+//		ExpiresHeader myExpiresHeader = myHeaderFactory
+//				.createExpiresHeader(60000);
+		ArrayList<String> myUserAgentStrings = new ArrayList<String>();
+		myUserAgentStrings.add("WangXing's SipClient");
+		UserAgentHeader myUserAgentHeader = myHeaderFactory.createUserAgentHeader(myUserAgentStrings);
+		
 		CallIdHeader myCallIDHeader = mySipProvider.getNewCallId();
 		javax.sip.address.URI myRequestURI = registrarAddress.getURI();
 		// SipURI myRequestURI = (SipURI) registrarAddress.getURI();
@@ -197,14 +217,21 @@ public class MessengerEngine implements SipListener {
 				myRequestURI, "REGISTER", myCallIDHeader, myCSeqHeader,
 				myFromHeader, myToHeader, myViaHeaders, myMaxForwardsHeader);
 		myRegisterRequest.addHeader(myContactHeader);
-		myRegisterRequest.addHeader(myExpiresHeader);
-
+		myRegisterRequest.addHeader(myUserAgentHeader);
+//		myRegisterRequest.addHeader(myExpiresHeader);
+		
 		myClientTransaction = mySipProvider
 				.getNewClientTransaction(myRegisterRequest);
 		myClientTransaction.sendRequest();
 
 		myGUI.log("[SENT] " + myRegisterRequest.toString());
 		setStatus(REGISTERING);
+		
+		/*
+		 * Get and show location
+		 */
+		testLocation();
+		myGUI.setStatusTextArea("Location: " + longitudeString + ", " + latitudeString);
 	}
 
 	public void setOff() {
@@ -843,7 +870,7 @@ public class MessengerEngine implements SipListener {
 			ToHeader myToHeader = myHeaderFactory.createToHeader(destinationAddress, null);
 			
 			// Create SUBSCRIBE request
-			Request myRequest = myMessageFactory.createRequest(myURI,
+			Request myRequest = myMessageFactory.createRequest(destinationURI,
 					"SUBSCRIBE", myCallIdHeader, myCSeqHeader, myFromHeader,
 					myToHeader, viaHeaders, myMaxForwardsHeader);
 			
@@ -860,7 +887,7 @@ public class MessengerEngine implements SipListener {
 			// Send the message
 			ClientTransaction myClientTransaction = mySipProvider.getNewClientTransaction(myRequest);
 			myClientTransaction.sendRequest();
-			System.out.println("[SENT] " + myRequest.toString());
+			myGUI.log("[SENT] " + myRequest.toString());
 			
 		} catch (ParseException e) {
 			e.printStackTrace();
@@ -958,15 +985,21 @@ public class MessengerEngine implements SipListener {
 					"xmlns:dm='urn:ietf:params:xml:ns:pidf:data-model' " +
 					"xmlns:rpid='urn:ietf:params:xml:ns:pidf:rpid' " +
 					"xmlns:c='urn:ietf:params:xml:ns:pidf:cipid' entity='");
-			String pureAddress = fromAddress.toString().replace("<", "").replace(">", "");
+			String pureAddress = fromAddress.toString().replace("<", "").replace(">", "").split(":5060")[0];
 			sb.append(pureAddress);
 			sb.append("'>");
 			sb.append("<tuple id='");
 			sb.append(myGUI.messengerConfiguration.id);
 			sb.append("'>");
-			sb.append("<status><basic>");
-			sb.append(status);
-			sb.append("</basic></status>");
+			sb.append("<status>");
+			sb.append("<basic>");
+			sb.append("open");
+			sb.append("</basic>");
+//			if (myGUI.messengerConfiguration.sendLocationWithPresence) {
+//				sb.append("<geoLongitude>" + longitudeString + "</geoLongitude>");
+//				sb.append("<geoLatitude>" + latitudeString + "</geoLatitude>");
+//			}
+			sb.append("</status>");
 			sb.append("</tuple><dm:person id='");
 			sb.append(myGUI.messengerConfiguration.id);
 			sb.append("'>");
@@ -985,7 +1018,7 @@ public class MessengerEngine implements SipListener {
 			// Send the message
 			ClientTransaction myClientTransaction = mySipProvider.getNewClientTransaction(myRequest);
 			myClientTransaction.sendRequest();
-			System.out.println("[SENT] " + myRequest.toString());
+			myGUI.log("[SENT] " + myRequest.toString());
 			
 		} catch (ParseException e) {
 			e.printStackTrace();
@@ -1011,16 +1044,54 @@ public class MessengerEngine implements SipListener {
 		 */
 		
 		try {
+			/*
+			 * Send OK to server
+			 */
 			Response myResponse = myMessageFactory.createResponse(200, myRequest);
 			myResponse.addHeader(myContactHeader);
 			myServerTransaction.sendResponse(myResponse);
 			myGUI.log("[SENT] " + myResponse.toString());
+			
+			/*
+			 * Fetch location information
+			 */
+			String xmlStr = new String(myRequest.getRawContent());
+			String destinationSipAddress = 
+					xmlStr.split("\"><tuple")[0]
+							.split("entity=\"")[1];
+			System.out.println("Header From: " + destinationSipAddress);	// DEBUG
+			System.out.println("xmlStr: ");	// DEBUG
+			System.out.println(xmlStr);		// DEBUG
+			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+	        DocumentBuilder builder = factory.newDocumentBuilder();
+	        InputSource is = new InputSource(new StringReader(xmlStr));
+	        Document doc =  builder.parse(is);
+	        String status = doc.getElementsByTagName("basic").item(0).getFirstChild().getNodeValue();
+	        
+	        // Show location
+			if (myGUI.messengerConfiguration.receiveLocationWithPresence) {
+				String longitudeStr = doc.getElementsByTagName("geoLongitude").item(0).getFirstChild().getNodeValue();
+		        String latitudeStr = doc.getElementsByTagName("geoLatitude").item(0).getFirstChild().getNodeValue();
+		        
+		        // update GUI
+		        myGUI.updateListWithStatus(destinationSipAddress, 
+		        		status + " (" + longitudeStr + ", " + latitudeStr + ")");
+			} else {
+				// update GUI
+				myGUI.updateListWithStatus(destinationSipAddress, status);
+			}
 
 		} catch (SipException e) {
 			e.printStackTrace();
 		} catch (InvalidArgumentException e) {
 			e.printStackTrace();
 		} catch (ParseException e) {
+			e.printStackTrace();
+		} catch (ParserConfigurationException e) {
+			e.printStackTrace();
+		} catch (SAXException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
@@ -1062,9 +1133,65 @@ public class MessengerEngine implements SipListener {
 		myGUI.setDialCaption();
 	}
 
+//	public void testLocation() {
+//		// Create an instance of HttpClient.
+//		HttpClient client = new HttpClient();
+//
+//		// Create a method instance.
+//		GetMethod method = new GetMethod("http://www.item.ntnu.no/fag/ttm4130/locate/");
+//
+//		// Provide custom retry handler is necessary
+//		method.getParams().setParameter(HttpMethodParams.RETRY_HANDLER,
+//				new DefaultHttpMethodRetryHandler(3, false));
+//
+//		try {
+//			// Execute the method.
+//			int statusCode = client.executeMethod(method);
+//
+//			if (statusCode != HttpStatus.SC_OK) {
+//				System.err.println("Method failed: " + method.getStatusLine());
+//			}
+//
+//			// Read the response body.
+//			byte[] responseBody = method.getResponseBody();
+//
+//			// Deal with the response.
+//			// Use caution: ensure correct character encoding and is not binary
+//			// data
+//			String xmlStr = new String(responseBody);
+//			
+//			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+//	        DocumentBuilder builder = factory.newDocumentBuilder();
+//	        InputSource is = new InputSource(new StringReader(xmlStr));
+//	        Document doc =  builder.parse(is);
+//	        
+//	        String longitudeStr = doc.getElementsByTagName("geoLongitude").item(0).getFirstChild().getNodeValue();
+//	        String latitudeStr = doc.getElementsByTagName("geoLatitude").item(0).getFirstChild().getNodeValue();
+//	        
+//	        // set instance variable
+//	        longitudeString = longitudeStr;
+//	        latitudeString = latitudeStr;
+//	        
+//		} catch (HttpException e) {
+//			System.err.println("Fatal protocol violation: " + e.getMessage());
+//			e.printStackTrace();
+//		} catch (IOException e) {
+//			System.err.println("Fatal transport error: " + e.getMessage());
+//			e.printStackTrace();
+//		} catch (ParserConfigurationException e) {
+//			e.printStackTrace();
+//		} catch (SAXException e) {
+//			e.printStackTrace();
+//		} finally {
+//			// Release the connection.
+//			method.releaseConnection();
+//		}
+//	}
+	
+	// Mock Method to speed up development
 	public void testLocation() {
-		// Write your task 2 code here
-
+		longitudeString = "99.99";
+        latitudeString = "88.88";
 	}
 
 }

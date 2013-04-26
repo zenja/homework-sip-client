@@ -72,7 +72,7 @@ public class MessengerConfiguration implements Serializable
         receiveLocationWithPresence = false;      
         locationAdInterval = 5;
         
-        locationURL = "http://geoposen.item.ntnu.no:8080/geofinder/ws/getloc";
+        locationURL = "http://www.item.ntnu.no/fag/ttm4130/locate/";
     }
     
     public void set(MessengerConfiguration config)
