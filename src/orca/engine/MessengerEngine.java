@@ -231,7 +231,6 @@ public class MessengerEngine implements SipListener {
 		 * Get and show location
 		 */
 		testLocation();
-		myGUI.setStatusTextArea("Location: " + longitudeString + ", " + latitudeString);
 	}
 
 	public void setOff() {
@@ -985,26 +984,27 @@ public class MessengerEngine implements SipListener {
 					"xmlns:dm='urn:ietf:params:xml:ns:pidf:data-model' " +
 					"xmlns:rpid='urn:ietf:params:xml:ns:pidf:rpid' " +
 					"xmlns:c='urn:ietf:params:xml:ns:pidf:cipid' entity='");
-			String pureAddress = fromAddress.toString().replace("<", "").replace(">", "").split(":5060")[0];
-			sb.append(pureAddress);
+//			String pureAddress = fromAddress.toString().replace("<", "").replace(">", "").split(":5060")[0];
+//			sb.append(pureAddress);
+			sb.append(myURI);
 			sb.append("'>");
 			sb.append("<tuple id='");
 			sb.append(myGUI.messengerConfiguration.id);
 			sb.append("'>");
 			sb.append("<status>");
 			sb.append("<basic>");
-			sb.append("open");
+			sb.append(statusid);
+			sb.append(",");
+			sb.append(longitudeString);
+			sb.append(",");
+			sb.append(latitudeString);
 			sb.append("</basic>");
-//			if (myGUI.messengerConfiguration.sendLocationWithPresence) {
-//				sb.append("<geoLongitude>" + longitudeString + "</geoLongitude>");
-//				sb.append("<geoLatitude>" + latitudeString + "</geoLatitude>");
-//			}
 			sb.append("</status>");
 			sb.append("</tuple><dm:person id='");
 			sb.append(myGUI.messengerConfiguration.id);
 			sb.append("'>");
 			sb.append("<rpid:activities><rpid:");
-			sb.append(statusid);
+			sb.append("Online");
 			sb.append("/>");
 			sb.append("</rpid:activities><dm:note>");
 			sb.append(statusid);
@@ -1055,7 +1055,11 @@ public class MessengerEngine implements SipListener {
 			/*
 			 * Fetch location information
 			 */
-			String xmlStr = new String(myRequest.getRawContent());
+			byte[] rawContent = myRequest.getRawContent();
+			if (rawContent == null) {
+				return;
+			}
+			String xmlStr = new String(rawContent);
 			String destinationSipAddress = 
 					xmlStr.split("\"><tuple")[0]
 							.split("entity=\"")[1];
@@ -1066,19 +1070,25 @@ public class MessengerEngine implements SipListener {
 	        DocumentBuilder builder = factory.newDocumentBuilder();
 	        InputSource is = new InputSource(new StringReader(xmlStr));
 	        Document doc =  builder.parse(is);
-	        String status = doc.getElementsByTagName("basic").item(0).getFirstChild().getNodeValue();
-	        
+	        String composedStatus = doc.getElementsByTagName("basic").item(0).getFirstChild().getNodeValue();
+	        String[] statusArray = composedStatus.split(",");
+			String theStatus = statusArray[0];
+			
 	        // Show location
 			if (myGUI.messengerConfiguration.receiveLocationWithPresence) {
-				String longitudeStr = doc.getElementsByTagName("geoLongitude").item(0).getFirstChild().getNodeValue();
-		        String latitudeStr = doc.getElementsByTagName("geoLatitude").item(0).getFirstChild().getNodeValue();
+				String theLongitudeStr = "";
+				String theLatitudeStr = "";
+				if (statusArray.length > 1) {
+					theLongitudeStr = composedStatus.split(",")[1];
+					theLatitudeStr = composedStatus.split(",")[2];
+				}
 		        
 		        // update GUI
 		        myGUI.updateListWithStatus(destinationSipAddress, 
-		        		status + " (" + longitudeStr + ", " + latitudeStr + ")");
+		        		composedStatus + " (" + theLongitudeStr + ", " + theLatitudeStr + ")");
 			} else {
 				// update GUI
-				myGUI.updateListWithStatus(destinationSipAddress, status);
+				myGUI.updateListWithStatus(destinationSipAddress, theStatus);
 			}
 
 		} catch (SipException e) {
@@ -1133,65 +1143,68 @@ public class MessengerEngine implements SipListener {
 		myGUI.setDialCaption();
 	}
 
-//	public void testLocation() {
-//		// Create an instance of HttpClient.
-//		HttpClient client = new HttpClient();
-//
-//		// Create a method instance.
-//		GetMethod method = new GetMethod("http://www.item.ntnu.no/fag/ttm4130/locate/");
-//
-//		// Provide custom retry handler is necessary
-//		method.getParams().setParameter(HttpMethodParams.RETRY_HANDLER,
-//				new DefaultHttpMethodRetryHandler(3, false));
-//
-//		try {
-//			// Execute the method.
-//			int statusCode = client.executeMethod(method);
-//
-//			if (statusCode != HttpStatus.SC_OK) {
-//				System.err.println("Method failed: " + method.getStatusLine());
-//			}
-//
-//			// Read the response body.
-//			byte[] responseBody = method.getResponseBody();
-//
-//			// Deal with the response.
-//			// Use caution: ensure correct character encoding and is not binary
-//			// data
-//			String xmlStr = new String(responseBody);
-//			
-//			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-//	        DocumentBuilder builder = factory.newDocumentBuilder();
-//	        InputSource is = new InputSource(new StringReader(xmlStr));
-//	        Document doc =  builder.parse(is);
-//	        
-//	        String longitudeStr = doc.getElementsByTagName("geoLongitude").item(0).getFirstChild().getNodeValue();
-//	        String latitudeStr = doc.getElementsByTagName("geoLatitude").item(0).getFirstChild().getNodeValue();
-//	        
-//	        // set instance variable
-//	        longitudeString = longitudeStr;
-//	        latitudeString = latitudeStr;
-//	        
-//		} catch (HttpException e) {
-//			System.err.println("Fatal protocol violation: " + e.getMessage());
-//			e.printStackTrace();
-//		} catch (IOException e) {
-//			System.err.println("Fatal transport error: " + e.getMessage());
-//			e.printStackTrace();
-//		} catch (ParserConfigurationException e) {
-//			e.printStackTrace();
-//		} catch (SAXException e) {
-//			e.printStackTrace();
-//		} finally {
-//			// Release the connection.
-//			method.releaseConnection();
-//		}
-//	}
-	
-	// Mock Method to speed up development
 	public void testLocation() {
-		longitudeString = "99.99";
-        latitudeString = "88.88";
+		// Create an instance of HttpClient.
+		HttpClient client = new HttpClient();
+
+		// Create a method instance.
+		GetMethod method = new GetMethod("http://www.item.ntnu.no/fag/ttm4130/locate/");
+
+		// Provide custom retry handler is necessary
+		method.getParams().setParameter(HttpMethodParams.RETRY_HANDLER,
+				new DefaultHttpMethodRetryHandler(3, false));
+
+		try {
+			// Execute the method.
+			int statusCode = client.executeMethod(method);
+
+			if (statusCode != HttpStatus.SC_OK) {
+				System.err.println("Method failed: " + method.getStatusLine());
+			}
+
+			// Read the response body.
+			byte[] responseBody = method.getResponseBody();
+
+			// Deal with the response.
+			// Use caution: ensure correct character encoding and is not binary
+			// data
+			String xmlStr = new String(responseBody);
+			
+			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+	        DocumentBuilder builder = factory.newDocumentBuilder();
+	        InputSource is = new InputSource(new StringReader(xmlStr));
+	        Document doc =  builder.parse(is);
+	        
+	        String longitudeStr = doc.getElementsByTagName("geoLongitude").item(0).getFirstChild().getNodeValue();
+	        String latitudeStr = doc.getElementsByTagName("geoLatitude").item(0).getFirstChild().getNodeValue();
+	        
+	        // set instance variable
+	        longitudeString = longitudeStr;
+	        latitudeString = latitudeStr;
+	        
+	        // update GUI
+	        myGUI.setStatusTextArea("Location: " + longitudeString + ", " + latitudeString);
+	        
+		} catch (HttpException e) {
+			System.err.println("Fatal protocol violation: " + e.getMessage());
+			e.printStackTrace();
+		} catch (IOException e) {
+			System.err.println("Fatal transport error: " + e.getMessage());
+			e.printStackTrace();
+		} catch (ParserConfigurationException e) {
+			e.printStackTrace();
+		} catch (SAXException e) {
+			e.printStackTrace();
+		} finally {
+			// Release the connection.
+			method.releaseConnection();
+		}
 	}
+	
+//	// Mock Method to speed up development
+//	public void testLocation() {
+//		longitudeString = "99.99";
+//        latitudeString = "88.88";
+//	}
 
 }
